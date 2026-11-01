@@ -50,9 +50,18 @@ jobs:
           path: dist/
 
       # Тег v* (наприклад, v0.2.0) → GitHub Release з готовим zip.
+      # Якщо реліз уже створено вручну (через UI), zip довантажується до нього.
       - name: Release
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" Holosomat-windows-x64.zip --title "Голосомат ${{ github.ref_name }}" --generate-notes
+        run: |
+          $tag = "${{ github.ref_name }}"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag Holosomat-windows-x64.zip --clobber
+          } else {
+            gh release create $tag Holosomat-windows-x64.zip --title "Голосомат $tag" --generate-notes
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
