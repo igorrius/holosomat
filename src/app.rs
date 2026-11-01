@@ -381,7 +381,24 @@ impl HolosomatApp {
                         Color32::from_rgb(230, 160, 40),
                         "⚠ Віртуальний кабель не знайдено. Без нього гра не почує зміненого голосу.",
                     );
-                    ui.hyperlink_to("Завантажити VB-Audio Virtual Cable (безкоштовно)", CABLE_URL);
+                    ui.horizontal_wrapped(|ui| {
+                        // hyperlink_to тут не працює: без фічі eframe «links»
+                        // egui нічим відкрити браузер, тож відкриваємо самі.
+                        let link = ui
+                            .link("Завантажити VB-Audio Virtual Cable (безкоштовно)")
+                            .on_hover_text(CABLE_URL);
+                        if link.clicked() && !open_url(CABLE_URL) {
+                            self.toast("Не вдалося відкрити браузер — скопіюй посилання");
+                        }
+                        if ui
+                            .small_button("📋 Копіювати посилання")
+                            .on_hover_text(CABLE_URL)
+                            .clicked()
+                        {
+                            ui.ctx().copy_text(CABLE_URL.to_owned());
+                            self.toast("Посилання скопійовано");
+                        }
+                    });
                 }
                 ui.label(
                     RichText::new(
@@ -687,4 +704,28 @@ fn open_folder(path: &std::path::Path) {
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let cmd = "xdg-open";
     let _ = std::process::Command::new(cmd).arg(path).spawn();
+}
+
+/// Відкриває адресу в браузері за замовчуванням. `false` — якщо не вдалося.
+fn open_url(url: &str) -> bool {
+    #[cfg(target_os = "windows")]
+    let mut cmd = {
+        // Без вікна консолі й без розбору `&` у адресі, як було б з `cmd /C start`.
+        let mut c = std::process::Command::new("rundll32");
+        c.args(["url.dll,FileProtocolHandler", url]);
+        c
+    };
+    #[cfg(target_os = "macos")]
+    let mut cmd = {
+        let mut c = std::process::Command::new("open");
+        c.arg(url);
+        c
+    };
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let mut cmd = {
+        let mut c = std::process::Command::new("xdg-open");
+        c.arg(url);
+        c
+    };
+    cmd.spawn().is_ok()
 }
