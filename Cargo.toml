@@ -1,0 +1,35 @@
+[package]
+name = "holosomat"
+version = "0.1.0"
+edition = "2024"
+description = "Голосомат — зміна голосу в реальному часі для ігор і Discord"
+license = "MIT"
+publish = false
+
+[dependencies]
+cpal = "0.18"
+directories = "6"
+# glow замість wgpu: менший exe і працює навіть на старих відеокартах.
+# x11/wayland потрібні лише для збірки під Linux (локальні тести).
+eframe = { version = "0.37", default-features = false, features = [
+    "default_fonts",
+    "glow",
+    "x11",
+    "wayland",
+] }
+# Чорно-білі емодзі для іконок у кнопках.
+egui = { version = "0.37", default-features = false, features = ["monochrome_emoji_fonts"] }
+realfft = "3.5"
+ringbuf = "0.6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true
+
+# DSP повільний у debug-збірці, тож навіть `cargo run` оптимізуємо.
+[profile.dev]
+opt-level = 2
