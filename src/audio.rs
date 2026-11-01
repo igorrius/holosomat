@@ -113,6 +113,11 @@ pub fn default_output() -> Option<DeviceInfo> {
 }
 
 /// Шукаємо VB-Audio Virtual Cable (його вхід — це наш вихід).
+/// Віртуальний кабель (VB-Audio CABLE), а не справжні навушники чи динаміки.
+pub fn is_virtual_cable(d: &DeviceInfo) -> bool {
+    d.name.to_lowercase().contains("cable")
+}
+
 pub fn find_virtual_cable(outputs: &[DeviceInfo]) -> Option<DeviceInfo> {
     outputs
         .iter()
@@ -226,7 +231,19 @@ pub fn start(cfg: &EngineConfig, shared: Arc<Shared>) -> Result<Engine, String> 
 
 fn report_error(shared: &Arc<Shared>) -> impl FnMut(cpal::Error) + Send + 'static {
     let shared = shared.clone();
-    move |e| shared.set_error(format!("Помилка звуку: {e}"))
+    move |e: cpal::Error| {
+        if is_fatal(&e) {
+            shared.set_error(format!("Помилка звуку: {e}"));
+        }
+    }
+}
+
+/// Чи потік після цієї помилки вже не працює і його треба перезапускати.
+/// Xrun — лише коротка «гикавка» (на Windows приходить, коли система
+/// не встигла віддати дані мікрофона); потік живий, буфер сам підлаштується.
+fn is_fatal(e: &cpal::Error) -> bool {
+    use cpal::ErrorKind as K;
+    !matches!(e.kind(), K::Xrun | K::DeviceChanged | K::RealtimeDenied)
 }
 
 // ---------------------------------------------------------------------------
@@ -484,5 +501,13 @@ mod tests {
         }
         assert!(r.primed);
         assert!((out[100] - 0.25).abs() < 1e-3);
+    }
+
+    #[test]
+    fn glitches_do_not_stop_the_engine() {
+        assert!(!is_fatal(&cpal::ErrorKind::Xrun.into()));
+        assert!(!is_fatal(&cpal::ErrorKind::DeviceChanged.into()));
+        assert!(is_fatal(&cpal::ErrorKind::DeviceNotAvailable.into()));
+        assert!(is_fatal(&cpal::ErrorKind::StreamInvalidated.into()));
     }
 }

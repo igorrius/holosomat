@@ -21,6 +21,8 @@ pub struct HolosomatApp {
 
     inputs: Vec<DeviceInfo>,
     outputs: Vec<DeviceInfo>,
+    /// Вихід за замовчуванням у Windows — куди грають гра, YouTube тощо.
+    default_out: Option<DeviceInfo>,
 
     paths: Paths,
     settings: Settings,
@@ -65,6 +67,7 @@ impl HolosomatApp {
             engine_error: None,
             inputs: Vec::new(),
             outputs: Vec::new(),
+            default_out: None,
             paths,
             settings,
             settings_dirty: None,
@@ -86,7 +89,14 @@ impl HolosomatApp {
             app.settings.output_id = audio::find_virtual_cable(&app.outputs).map(|d| d.id);
         }
         if app.settings.monitor_id.is_none() {
-            app.settings.monitor_id = audio::default_output().map(|d| d.id);
+            // «Чути себе» — у справжні навушники, навіть якщо Windows
+            // помилково шле все в кабель.
+            app.settings.monitor_id = app
+                .default_out
+                .iter()
+                .chain(&app.outputs)
+                .find(|d| !audio::is_virtual_cable(d))
+                .map(|d| d.id.clone());
         }
         if app.settings.output_id.is_some() {
             app.start_engine();
@@ -99,6 +109,7 @@ impl HolosomatApp {
     fn refresh_devices(&mut self) {
         self.inputs = audio::list_inputs();
         self.outputs = audio::list_outputs();
+        self.default_out = audio::default_output();
     }
 
     fn start_engine(&mut self) {
@@ -397,6 +408,25 @@ impl HolosomatApp {
                         {
                             ui.ctx().copy_text(CABLE_URL.to_owned());
                             self.toast("Посилання скопійовано");
+                        }
+                    });
+                }
+                if let Some(d) = self.default_out.as_ref().filter(|d| audio::is_virtual_cable(d)) {
+                    ui.colored_label(
+                        Color32::from_rgb(230, 160, 40),
+                        format!(
+                            "⚠ Windows виводить увесь звук у «{}», тому гру й YouTube не чути. \
+                             Зроби навушники чи динаміки пристроєм за замовчуванням, \
+                             а кабель лиш тут, у «Куди йде голос».",
+                            d.name
+                        ),
+                    );
+                    ui.horizontal(|ui| {
+                        if ui.button("🔊 Налаштування звуку Windows").clicked() {
+                            open_sound_settings();
+                        }
+                        if ui.button("🔄 Я змінив — перевірити").clicked() {
+                            self.refresh_devices();
                         }
                     });
                 }
@@ -704,6 +734,14 @@ fn open_folder(path: &std::path::Path) {
     #[cfg(not(any(target_os = "windows", target_os = "macos")))]
     let cmd = "xdg-open";
     let _ = std::process::Command::new(cmd).arg(path).spawn();
+}
+
+/// Класичне вікно «Звук»: ПКМ по навушниках → «Використовувати за замовчуванням».
+fn open_sound_settings() {
+    #[cfg(target_os = "windows")]
+    let _ = std::process::Command::new("control")
+        .arg("mmsys.cpl")
+        .spawn();
 }
 
 /// Відкриває адресу в браузері за замовчуванням. `false` — якщо не вдалося.
